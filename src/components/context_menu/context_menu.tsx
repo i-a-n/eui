@@ -1,3 +1,15 @@
+/**
+ * NOTE: This component has been "broken off" from the EUI component of the same name.
+ * See the original code that was copied over here:
+ * https://github.com/elastic/eui/blob/f937f/src/components/context_menu/context_menu.tsx
+ * Our changes to the component are confined entirely to the `maximumHeight` prop and
+ * its use in calculating the Context Menu's height, and scrolling to the top of a panel
+ * after its transition.
+ *
+ * This also requires a CSS change which lives in a sibling file to this one:
+ * ./DMuiContextMenu.scss
+ */
+
 /*
  * Licensed to Elasticsearch B.V. under one or more contributor
  * license agreements. See the NOTICE file distributed with
@@ -25,16 +37,18 @@ import React, {
 } from 'react';
 import classNames from 'classnames';
 
-import { CommonProps } from '../common';
+import { CommonProps } from '@elastic/eui/src/components/common';
 import {
   EuiContextMenuPanel,
   EuiContextMenuPanelTransitionDirection,
   EuiContextMenuPanelTransitionType,
-} from './context_menu_panel';
+  // @ts-ignore
+} from '@elastic/eui/lib/components/context_menu/context_menu_panel';
 import {
   EuiContextMenuItem,
   EuiContextMenuItemProps,
-} from './context_menu_item';
+  // @ts-ignore
+} from '@elastic/eui/lib/components/context_menu/context_menu_item';
 
 export type EuiContextMenuPanelId = string | number;
 
@@ -61,10 +75,14 @@ export type EuiContextMenuProps = CommonProps &
     initialPanelId?: EuiContextMenuPanelId;
   };
 
+interface DMuiContextMenuProps extends EuiContextMenuProps {
+  maximumHeight?: number;
+}
+
 function mapIdsToPanels(panels: EuiContextMenuPanelDescriptor[]) {
   const map: { [id: string]: EuiContextMenuPanelDescriptor } = {};
 
-  panels.forEach(panel => {
+  panels.forEach((panel) => {
     map[panel.id] = panel;
   });
 
@@ -74,9 +92,9 @@ function mapIdsToPanels(panels: EuiContextMenuPanelDescriptor[]) {
 function mapIdsToPreviousPanels(panels: EuiContextMenuPanelDescriptor[]) {
   const idToPreviousPanelIdMap: { [panel: string]: EuiContextMenuPanelId } = {};
 
-  panels.forEach(panel => {
+  panels.forEach((panel) => {
     if (Array.isArray(panel.items)) {
-      panel.items.forEach(item => {
+      panel.items.forEach((item) => {
         const isCloseable = item.panel !== undefined;
         if (isCloseable) {
           idToPreviousPanelIdMap[item.panel!] = panel.id;
@@ -93,7 +111,7 @@ function mapPanelItemsToPanels(panels: EuiContextMenuPanelDescriptor[]) {
     [id: string]: { [index: string]: EuiContextMenuPanelId };
   } = {};
 
-  panels.forEach(panel => {
+  panels.forEach((panel) => {
     idAndItemIndexToPanelIdMap[panel.id] = {};
 
     if (panel.items) {
@@ -128,10 +146,11 @@ interface State {
   isUsingKeyboardToNavigate: boolean;
 }
 
-export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
+export class DMuiContextMenu extends Component<DMuiContextMenuProps, State> {
   static defaultProps: Partial<EuiContextMenuProps> = {
     panels: [],
   };
+  contextMenuRef: React.RefObject<HTMLDivElement>;
 
   static getDerivedStateFromProps(
     nextProps: EuiContextMenuProps,
@@ -169,6 +188,8 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
       focusedItemIndex: undefined,
       isUsingKeyboardToNavigate: false,
     };
+
+    this.contextMenuRef = React.createRef();
   }
 
   componentDidUpdate(prevProps: EuiContextMenuProps) {
@@ -227,7 +248,7 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
       // Set focus on the item which shows the panel we're leaving.
       const previousPanel = this.state.idToPanelMap[previousPanelId];
       const focusedItemIndex = previousPanel.items!.findIndex(
-        item => item.panel === this.state.incomingPanelId
+        (item) => item.panel === this.state.incomingPanelId
       );
 
       if (focusedItemIndex !== -1) {
@@ -242,15 +263,36 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
 
   onIncomingPanelHeightChange = (height: number) => {
     this.setState(({ height: prevHeight }) => {
+      let _height = height;
+
       if (height === prevHeight) {
         return null;
       }
 
-      return { height };
+      // If a maximumHeight was specified, and the incoming height is larger
+      // than that, set the panel's height to maximumHeight
+      if (this.props.maximumHeight && height > this.props.maximumHeight) {
+        _height = this.props.maximumHeight;
+      }
+
+      return { height: _height };
     });
   };
 
   onOutGoingPanelTransitionComplete = () => {
+    // If we've got an active ContextMenu, and a max height that equals the menu's
+    // height (meaning it's been shortened), scroll to the top of it
+    if (
+      this.contextMenuRef?.current &&
+      this.props.maximumHeight === this.state.height
+    ) {
+      this.contextMenuRef.current.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'smooth',
+      });
+    }
+
     this.setState({
       isOutgoingPanelVisible: false,
     });
@@ -268,7 +310,7 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
     const idToRenderedItemsMap: { [id: string]: ReactElement[] } = {};
 
     // Pre-rendering the items lets us check reference equality inside of EuiContextMenuPanel.
-    panels.forEach(panel => {
+    panels.forEach((panel) => {
       idToRenderedItemsMap[panel.id] = this.renderItems(panel.items);
     });
 
@@ -312,7 +354,8 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
           hasPanel={Boolean(panel)}
           toolTipTitle={toolTipTitle}
           toolTipContent={toolTipContent}
-          {...rest}>
+          {...rest}
+        >
           {name}
         </EuiContextMenuItem>
       );
@@ -367,14 +410,21 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
         }
         onUseKeyboardToNavigate={this.onUseKeyboardToNavigate}
         showNextPanel={this.showNextPanel}
-        showPreviousPanel={this.showPreviousPanel}>
+        showPreviousPanel={this.showPreviousPanel}
+      >
         {panel.content}
       </EuiContextMenuPanel>
     );
   }
 
   render() {
-    const { panels, className, initialPanelId, ...rest } = this.props;
+    const {
+      panels,
+      className,
+      initialPanelId,
+      maximumHeight,
+      ...rest
+    } = this.props;
 
     const incomingPanel = this.renderPanel(this.state.incomingPanelId!, 'in');
     let outgoingPanel;
@@ -389,13 +439,15 @@ export class EuiContextMenu extends Component<EuiContextMenuProps, State> {
         ? this.state.idToPanelMap[this.state.incomingPanelId!].width
         : undefined;
 
-    const classes = classNames('euiContextMenu', className);
+    const classes = classNames('euiContextMenu', 'dmContextMenu', className);
 
     return (
       <div
         className={classes}
         style={{ height: this.state.height, width: width }}
-        {...rest}>
+        ref={this.contextMenuRef}
+        {...rest}
+      >
         {outgoingPanel}
         {incomingPanel}
       </div>
